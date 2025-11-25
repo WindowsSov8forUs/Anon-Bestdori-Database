@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -33,23 +34,44 @@ type Config struct {
 	Server ServerConfig `mapstructure:"server"`
 }
 
+var configPaths = []string{
+	"mongo.uri",
+	"log.level",
+	"api.timeout",
+	"api.proxy",
+	"server.host",
+	"server.port",
+}
+
+func applyEnvOverrides() {
+	for _, path := range configPaths {
+		if !viper.IsSet(path) {
+			envKey := "ANON_DATABASE_" + strings.ToUpper(strings.ReplaceAll(path, ".", "_"))
+			if val := os.Getenv(envKey); val != "" {
+				viper.Set(path, val)
+			}
+		}
+	}
+}
+
 func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
 
-	if err := viper.ReadInConfig(); err != nil {
+	// 先加载默认配置
+	viper.ReadConfig(bytes.NewBuffer([]byte(DEFAULT_CONFIG)))
+
+	err := viper.ReadInConfig()
+	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// 创建默认配置文件
-			viper.ReadConfig(bytes.NewBuffer([]byte(DEFAULT_CONFIG)))
-			if err := viper.WriteConfigAs("config.yaml"); err != nil {
-				return nil, err
-			}
-			fmt.Print("Default configuration file config.yaml has been created. Please edit it and restart the program.\n")
-			os.Exit(0)
+			fmt.Println("No config.yaml found, using defaults and environment variables. You can create config.yaml to override.")
+		} else {
+			return nil, err
 		}
-		return nil, err
 	}
+
+	applyEnvOverrides()
 
 	cfg := &Config{}
 	if err := viper.Unmarshal(cfg); err != nil {
@@ -58,10 +80,15 @@ func Load() (*Config, error) {
 
 	return cfg, nil
 }
-
 func (c *Config) Reload() error {
-	if err := viper.ReadInConfig(); err != nil {
-		return fmt.Errorf("failed to reload config file: %w", err)
+	err := viper.ReadInConfig()
+	if err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return fmt.Errorf("failed to reload config file: %w", err)
+		}
 	}
+
+	applyEnvOverrides()
+
 	return viper.Unmarshal(c)
 }

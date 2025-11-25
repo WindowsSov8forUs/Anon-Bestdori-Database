@@ -1,5 +1,5 @@
-github.com/WindowsSov8forUs/bestdori-api-go v0.1.14 h1:A9Pso81vm3kqTpe1r1RC/Va5O2g0mErxnBgGlWfOY8M=
-github.com/WindowsSov8forUs/bestdori-api-go v0.1.14/go.mod h1:S+Gb/IV+L1YUdmOyq2wFI09VQ3/hFnyOHN/QDPOHdEQ=
+github.com/WindowsSov8forUs/bestdori-api-go v0.1.15 h1:sQr3xvFfZ0meXFEPfVNvrnjD8aPPeh4HRAmVDo2P5p4=
+github.com/WindowsSov8forUs/bestdori-api-go v0.1.15/go.mod h1:S+Gb/IV+L1YUdmOyq2wFI09VQ3/hFnyOHN/QDPOHdEQ=
 github.com/andybalholm/brotli v1.0.5 h1:8uQZIdzKmjc/iuPu7O2ioW48L81FgatrcpfFmiq/cCs=
 github.com/andybalholm/brotli v1.0.5/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
