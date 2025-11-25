@@ -6,6 +6,7 @@ import (
 
 	"anon-bestdori-database/database"
 	"anon-bestdori-database/pkg/log"
+	"anon-bestdori-database/version"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -32,6 +33,7 @@ func corsMiddleware(c *fiber.Ctx) error {
 	c.Response().Header.Set("Access-Control-Allow-Origin", "*")
 	c.Response().Header.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	c.Response().Header.Set("Access-Control-Allow-Headers", "*")
+	c.Response().Header.Set("Server-Version", "Anon-Database/"+version.Version)
 	if c.Method() == "OPTIONS" {
 		return c.SendStatus(fiber.StatusNoContent)
 	}

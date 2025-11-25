@@ -6,6 +6,7 @@ import (
 	"anon-bestdori-database/database"
 	"anon-bestdori-database/pkg/log"
 	"anon-bestdori-database/server"
+	"anon-bestdori-database/version"
 	"context"
 	"fmt"
 	"net"
@@ -109,6 +110,7 @@ func Run(conf *config.Config, init bool) error {
 	}
 
 	app.Run()
+	log.Infof("application version: %s", version.Version)
 	return nil
 }
 

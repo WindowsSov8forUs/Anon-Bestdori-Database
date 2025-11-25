@@ -1,0 +1,66 @@
+# .goreleaser.yml
+version: 2
+
+before:
+  hooks:
+    - mkdir -p internal
+    - go mod tidy
+    - go generate ./...
+    - go install github.com/akavel/rsrc@latest
+    - which rsrc
+    - rm -rf ./dist
+
+release:
+  prerelease: auto
+
+builds:
+  - id: nowin
+    env:
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/WindowsSov8forUs/anon-bestdori-database/version.Version={{ .Version }}
+  - id: win
+    env:
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/WindowsSov8forUs/anon-bestdori-database/version.Version={{ .Version }}
+
+archives:
+  - id: binary
+    formats: [binary]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+  - id: archive
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE*
+
+# checksum:
+#   name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
