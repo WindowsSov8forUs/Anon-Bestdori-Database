@@ -27,7 +27,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X github.com/WindowsSov8forUs/anon-bestdori-database/version.Version={{ .Version }}
+      - -s -w -X anon-bestdori-database/version.Version={{ .Version }}
   - id: win
     env:
       - CGO_ENABLED=0
@@ -40,7 +40,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X github.com/WindowsSov8forUs/anon-bestdori-database/version.Version={{ .Version }}
+      - -s -w -X anon-bestdori-database/version.Version={{ .Version }}
 
 archives:
   - id: binary
