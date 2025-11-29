@@ -3,7 +3,7 @@ module anon-bestdori-database
 go 1.25.4
 
 require (
-	github.com/WindowsSov8forUs/bestdori-api-go v0.1.16
+	github.com/WindowsSov8forUs/bestdori-api-go v0.1.17
 	github.com/fatih/color v1.17.0
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/qiniu/qmgo v1.1.10

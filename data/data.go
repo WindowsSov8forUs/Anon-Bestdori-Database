@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	bestdoriapi "github.com/WindowsSov8forUs/bestdori-api-go"
@@ -15,7 +16,6 @@ import (
 	"anon-bestdori-database/database"
 	"anon-bestdori-database/files"
 	"anon-bestdori-database/pkg/log"
-	"sync"
 )
 
 type DataUpdater struct {
@@ -30,13 +30,23 @@ type DataUpdater struct {
 	updateDone    chan struct{}
 }
 
-const defaultPostGapLimit = 20
+var retryAttempts int
+
+func setRetryAttempts(n int) {
+	if n <= 0 {
+		retryAttempts = 1
+		return
+	}
+	retryAttempts = n
+}
 
 func NewDataUpdater(db *database.Database, conf *config.Config, ctx context.Context) *DataUpdater {
 	bestdoriapi.RegisterLogger(log.GetLogger())
 
-	bestdoriAPI := bestdoriapi.NewBestdoriAPI(conf.API.Proxy, conf.API.Timeout)
-	niconiAPI := bestdoriapi.NewNiconiAPI(conf.API.Proxy, conf.API.Timeout)
+	bestdoriAPI := bestdoriapi.NewBestdoriAPI(conf.API.Proxy, conf.API.Timeout, conf.API.Retry)
+	niconiAPI := bestdoriapi.NewNiconiAPI(conf.API.Proxy, conf.API.Timeout, conf.API.Retry)
+
+	setRetryAttempts(conf.API.Retry)
 
 	return &DataUpdater{
 		bestdoriAPI:  bestdoriAPI,
@@ -44,14 +54,20 @@ func NewDataUpdater(db *database.Database, conf *config.Config, ctx context.Cont
 		db:           db,
 		conf:         conf,
 		ctx:          ctx,
-		postGapLimit: defaultPostGapLimit,
+		postGapLimit: conf.API.Gap,
 	}
 }
 
 func retry(fn func() error) error {
-	for {
+	attempts := retryAttempts
+	if attempts <= 0 {
+		attempts = 5
+	}
+	var lastErr error
+	for i := 0; i < attempts; i++ {
 		if err := fn(); err != nil {
-			if isResponseStatusError(err) {
+			lastErr = err
+			if isResponseStatusError(err) && i < attempts-1 {
 				time.Sleep(3 * time.Second)
 				continue
 			}
@@ -59,6 +75,7 @@ func retry(fn func() error) error {
 		}
 		return nil
 	}
+	return lastErr
 }
 
 func isResponseStatusError(err error) bool {

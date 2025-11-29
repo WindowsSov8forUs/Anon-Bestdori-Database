@@ -17,6 +17,10 @@ func setDefaults() {
 			defVal = 5
 		case "api.proxy":
 			defVal = ""
+		case "api.retry":
+			defVal = 5
+		case "api.gap":
+			defVal = 10
 		case "server.host":
 			defVal = "0.0.0.0"
 		case "server.port":

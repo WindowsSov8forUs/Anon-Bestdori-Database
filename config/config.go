@@ -24,6 +24,8 @@ type LogConfig struct {
 type APIConfig struct {
 	Timeout int    `mapstructure:"timeout"`
 	Proxy   string `mapstructure:"proxy"`
+	Retry   int    `mapstructure:"retry"`
+	Gap     int    `mapstructure:"gap"`
 }
 
 type Config struct {
@@ -38,6 +40,8 @@ var configPaths = []string{
 	"log.level",
 	"api.timeout",
 	"api.proxy",
+	"api.retry",
+	"api.gap",
 	"server.host",
 	"server.port",
 }
