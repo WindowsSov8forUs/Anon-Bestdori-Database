@@ -19,13 +19,15 @@ import (
 )
 
 type DataUpdater struct {
-	bestdoriAPI  *uniapi.UniAPI
-	niconiAPI    *uniapi.UniAPI
-	db           *database.Database
-	conf         *config.Config
-	ctx          context.Context
-	postGapLimit int
-	mu           sync.Mutex
+	bestdoriAPI   *uniapi.UniAPI
+	niconiAPI     *uniapi.UniAPI
+	db            *database.Database
+	conf          *config.Config
+	ctx           context.Context
+	postGapLimit  int
+	mu            sync.Mutex
+	updateRunning bool
+	updateDone    chan struct{}
 }
 
 func NewDataUpdater(db *database.Database, conf *config.Config, ctx context.Context) *DataUpdater {
