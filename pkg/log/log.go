@@ -137,9 +137,9 @@ func Init(conf *config.Config, logName string) error {
 
 	lumberjackLogger := &lumberjack.Logger{
 		Filename:   filepath.Join("log", logName+".log"),
-		MaxSize:    256, // MB
-		MaxBackups: 10,
-		MaxAge:     7, // days
+		MaxSize:    10, // MB
+		MaxBackups: 14,
+		MaxAge:     1, // days
 		Compress:   true,
 		LocalTime:  true,
 	}
