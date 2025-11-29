@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"anon-bestdori-database/data"
 	"anon-bestdori-database/database"
 	"anon-bestdori-database/pkg/log"
 	"anon-bestdori-database/version"
@@ -14,6 +16,7 @@ import (
 type Server struct {
 	app      *fiber.App
 	database *database.Database
+	updater  *data.DataUpdater
 }
 
 func loggerMiddleware(c *fiber.Ctx) error {
@@ -40,7 +43,7 @@ func corsMiddleware(c *fiber.Ctx) error {
 	return c.Next()
 }
 
-func New(db *database.Database) *Server {
+func New(db *database.Database, updater *data.DataUpdater) *Server {
 	app := fiber.New(fiber.Config{
 		ServerHeader: "anon-bestdori-database",
 		AppName:      "Anon Bestdori Database",
@@ -59,9 +62,24 @@ func New(db *database.Database) *Server {
 	s := &Server{
 		app:      app,
 		database: db,
+		updater:  updater,
 	}
 
 	return s
+}
+
+func (s *Server) UpdateSongByID(id int) (bool, error) {
+	if s.updater == nil {
+		return false, fmt.Errorf("data updater not configured")
+	}
+	return s.updater.UpdateSongByID(id)
+}
+
+func (s *Server) UpdatePostByID(id int) (bool, error) {
+	if s.updater == nil {
+		return false, fmt.Errorf("data updater not configured")
+	}
+	return s.updater.UpdatePostByID(id)
 }
 
 func (s *Server) Start(ctx context.Context, addr string) error {

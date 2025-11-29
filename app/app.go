@@ -42,7 +42,7 @@ func newApp(conf *config.Config) (*app, error) {
 	log.Infof("connection with database established: %s", conf.Mongo.URI)
 
 	updater := data.NewDataUpdater(db, conf, ctx)
-	srv := server.New(db)
+	srv := server.New(db, updater)
 
 	return &app{
 		ctx:     ctx,
