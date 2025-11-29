@@ -30,6 +30,8 @@ type DataUpdater struct {
 	updateDone    chan struct{}
 }
 
+const defaultPostGapLimit = 20
+
 func NewDataUpdater(db *database.Database, conf *config.Config, ctx context.Context) *DataUpdater {
 	bestdoriapi.RegisterLogger(log.GetLogger())
 
@@ -37,11 +39,12 @@ func NewDataUpdater(db *database.Database, conf *config.Config, ctx context.Cont
 	niconiAPI := bestdoriapi.NewNiconiAPI(conf.API.Proxy, conf.API.Timeout)
 
 	return &DataUpdater{
-		bestdoriAPI: bestdoriAPI,
-		niconiAPI:   niconiAPI,
-		db:          db,
-		conf:        conf,
-		ctx:         ctx,
+		bestdoriAPI:  bestdoriAPI,
+		niconiAPI:    niconiAPI,
+		db:           db,
+		conf:         conf,
+		ctx:          ctx,
+		postGapLimit: defaultPostGapLimit,
 	}
 }
 

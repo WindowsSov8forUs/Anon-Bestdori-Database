@@ -1,9 +1,9 @@
 package data
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"strconv"
 	"time"
@@ -25,13 +25,13 @@ func needsSongUpdate(existing *dto.SongInfo, newInfo dto.SongsAll8Info) bool {
 	if existing == nil {
 		return true
 	}
+	existingInfo := normalizeSongsAll8Info(existing.SongsAll8Info)
+	latestInfo := normalizeSongsAll8Info(newInfo)
 
-	newJSON, _ := json.Marshal(newInfo)
-
-	all8 := existing.SongsAll8Info
-	oldJSON, _ := json.Marshal(all8)
-
-	return !bytes.Equal(newJSON, oldJSON)
+	if !reflect.DeepEqual(existingInfo, latestInfo) {
+		return true
+	}
+	return difficultiesChanged(existing.Difficulty, newInfo.Difficulty)
 }
 
 func (du *DataUpdater) Update() error {
@@ -102,53 +102,8 @@ func (du *DataUpdater) UpdateSongByID(id int) (bool, error) {
 	}
 	log.Infof("updated song %d", id)
 
-	jacketList := song.GetJacket()
-	for _, jacket := range jacketList {
-		jacketName := fmt.Sprintf("musicjacket/%s.png", jacket.JacketImage)
-		if _, err := files.GetAssets(jacketName); err != nil {
-			log.Infof("downloading missing jacket %s for song %d", jacket.JacketImage, id)
-			if err := retry(func() error {
-				return downloadMusicJacket(jacket)
-			}); err != nil {
-				log.Errorf("failed to update jacket %s for song %d: %v", jacket.JacketImage, id, err)
-			} else {
-				log.Infof("updated jacket %s for song %d", jacket.JacketImage, id)
-			}
-		}
-	}
-
-	bgmName := fmt.Sprintf("sound/bgm%03d.mp3", song.Id)
-	if _, err := files.GetAssets(bgmName); err != nil {
-		log.Infof("downloading missing BGM for song %d", id)
-		if err := retry(func() error {
-			return downloadBGM(song)
-		}); err != nil {
-			log.Errorf("failed to update BGM for song %d: %v", id, err)
-		} else {
-			log.Infof("updated BGM for song %d", id)
-		}
-	}
-
-	diffs := []string{"easy", "normal", "hard", "expert", "special"}
-	for _, diffStr := range diffs {
-		chartID := fmt.Sprintf("%d-%s", id, diffStr)
-		if existingChart, _ := du.db.GetChartByID(du.ctx, chartID); existingChart == nil {
-			log.Infof("updating missing chart %s for song %d", chartID, id)
-			diff := dto.ChartDifficultyName(diffStr)
-			chart, err := getChart(song, diff)
-			if err != nil {
-				if _, ok := err.(*bestdori.NotExistError); !ok {
-					log.Errorf("failed to get chart %s for song %d: %v", diffStr, id, err)
-				}
-				continue
-			}
-			if err := du.db.UpsertChart(du.ctx, chartID, chart); err != nil {
-				log.Errorf("failed to upsert chart %s: %v", chartID, err)
-			} else {
-				log.Infof("updated chart %s", chartID)
-			}
-		}
-	}
+	du.ensureSongAssets(song)
+	du.ensureSongCharts(song)
 	log.Infof("checked jackets and charts for song %d", id)
 	return true, nil
 }
@@ -157,25 +112,10 @@ func (du *DataUpdater) updatePosts() error {
 	if err := du.ctx.Err(); err != nil {
 		return err
 	}
-	data, err := files.LoadCache("POST_UPDATE_INFO")
+	info, err := du.loadPostUpdateInfo()
 	if err != nil {
 		log.Errorf("failed to load post update cache: %v", err)
 		return err
-	}
-	var info PostUpdateInfo
-	if len(data) == 0 {
-		newestId, err := du.db.GetNewestPostID(du.ctx)
-		if err == nil && newestId > 0 {
-			info.LastID = newestId
-		} else {
-			info.LastID = 0
-		}
-		info.Time = time.Now()
-	} else {
-		if err := json.Unmarshal(data, &info); err != nil {
-			log.Errorf("failed to parse post update cache: %v", err)
-			return err
-		}
 	}
 
 	currentID := info.LastID + 1
@@ -188,22 +128,20 @@ func (du *DataUpdater) updatePosts() error {
 		if err != nil {
 			if !exists {
 				log.Warnf("failed to get post %d or it does not exist", currentID)
-				currentID++
-				if currentID-info.LastID > du.postGapLimit {
-					log.Infof("post update stopped, consecutive missing posts exceed %d", du.postGapLimit)
-					break
-				}
-				continue
+			} else {
+				log.Errorf("failed to update post %d: %v", currentID, err)
 			}
-			log.Errorf("failed to update post %d: %v", currentID, err)
+			currentID++
+			if du.shouldStopPostUpdates(info.LastID, currentID) {
+				log.Infof("post update stopped, consecutive missing posts exceed %d", du.postGapLimit)
+				break
+			}
+			continue
 		}
 		if exists {
 			info.LastID = currentID
 			info.Time = time.Now()
-			cacheData, _ := json.Marshal(info)
-			if err := files.SaveCache("POST_UPDATE_INFO", cacheData); err != nil {
-				log.Errorf("failed to save post update cache: %v", err)
-			}
+			du.persistPostUpdateInfo(info)
 		}
 		currentID++
 	}
@@ -227,6 +165,175 @@ func (du *DataUpdater) UpdatePostByID(id int) (bool, error) {
 		log.Infof("updated post %d", id)
 	}
 	return true, nil
+}
+
+type chartDiffSpec struct {
+	key   string
+	label string
+}
+
+var (
+	baseChartDiffs = []chartDiffSpec{
+		{key: "0", label: "easy"},
+		{key: "1", label: "normal"},
+		{key: "2", label: "hard"},
+		{key: "3", label: "expert"},
+	}
+	specialChartDiff = chartDiffSpec{key: "4", label: "special"}
+)
+
+func (du *DataUpdater) ensureSongAssets(song *songs.Song) {
+	du.ensureSongJackets(song)
+	du.ensureSongBGM(song)
+}
+
+func (du *DataUpdater) ensureSongJackets(song *songs.Song) {
+	for _, jacket := range song.GetJacket() {
+		jacketName := fmt.Sprintf("musicjacket/%s.png", jacket.JacketImage)
+		if _, err := files.GetAssets(jacketName); err != nil {
+			log.Infof("downloading missing jacket %s for song %d", jacket.JacketImage, song.Id)
+			if err := retry(func() error {
+				return downloadMusicJacket(jacket)
+			}); err != nil {
+				log.Errorf("failed to update jacket %s for song %d: %v", jacket.JacketImage, song.Id, err)
+			} else {
+				log.Infof("updated jacket %s for song %d", jacket.JacketImage, song.Id)
+			}
+		}
+	}
+}
+
+func (du *DataUpdater) ensureSongBGM(song *songs.Song) {
+	bgmName := fmt.Sprintf("sound/bgm%03d.mp3", song.Id)
+	if _, err := files.GetAssets(bgmName); err != nil {
+		log.Infof("downloading missing BGM for song %d", song.Id)
+		if err := retry(func() error {
+			return downloadBGM(song)
+		}); err != nil {
+			log.Errorf("failed to update BGM for song %d: %v", song.Id, err)
+		} else {
+			log.Infof("updated BGM for song %d", song.Id)
+		}
+	}
+}
+
+func (du *DataUpdater) ensureSongCharts(song *songs.Song) {
+	for _, diff := range chartDiffsFromInfo(song.Info) {
+		chartID := fmt.Sprintf("%d-%s", song.Id, diff.label)
+		if existingChart, _ := du.db.GetChartByID(du.ctx, chartID); existingChart != nil {
+			continue
+		}
+		log.Infof("updating missing chart %s for song %d", chartID, song.Id)
+		chart, err := getChart(song, dto.ChartDifficultyName(diff.label))
+		if err != nil {
+			if _, ok := err.(*bestdori.NotExistError); !ok {
+				log.Errorf("failed to get chart %s for song %d: %v", diff.label, song.Id, err)
+			}
+			continue
+		}
+		if err := du.db.UpsertChart(du.ctx, chartID, chart); err != nil {
+			log.Errorf("failed to upsert chart %s: %v", chartID, err)
+		} else {
+			log.Infof("updated chart %s", chartID)
+		}
+	}
+}
+
+func chartDiffsFromInfo(info *dto.SongInfo) []chartDiffSpec {
+	diffs := make([]chartDiffSpec, 0, len(baseChartDiffs)+1)
+	if info == nil || info.Difficulty == nil {
+		return append(diffs, baseChartDiffs...)
+	}
+	for _, diff := range baseChartDiffs {
+		if _, ok := info.Difficulty[diff.key]; ok {
+			diffs = append(diffs, diff)
+		}
+	}
+	if _, ok := info.Difficulty[specialChartDiff.key]; ok {
+		diffs = append(diffs, specialChartDiff)
+	}
+	if len(diffs) == 0 {
+		return append(diffs, baseChartDiffs...)
+	}
+	return diffs
+}
+
+func (du *DataUpdater) loadPostUpdateInfo() (PostUpdateInfo, error) {
+	data, err := files.LoadCache("POST_UPDATE_INFO")
+	if err != nil {
+		return PostUpdateInfo{}, err
+	}
+	var info PostUpdateInfo
+	if len(data) == 0 {
+		newestId, err := du.db.GetNewestPostID(du.ctx)
+		if err == nil && newestId > 0 {
+			info.LastID = newestId
+		}
+		info.Time = time.Now()
+		return info, nil
+	}
+	if err := json.Unmarshal(data, &info); err != nil {
+		return PostUpdateInfo{}, err
+	}
+	return info, nil
+}
+
+func (du *DataUpdater) persistPostUpdateInfo(info PostUpdateInfo) {
+	cacheData, err := json.Marshal(info)
+	if err != nil {
+		log.Errorf("failed to marshal post update cache: %v", err)
+		return
+	}
+	if err := files.SaveCache("POST_UPDATE_INFO", cacheData); err != nil {
+		log.Errorf("failed to save post update cache: %v", err)
+	}
+}
+
+func (du *DataUpdater) shouldStopPostUpdates(lastID, currentID int) bool {
+	if du.postGapLimit <= 0 {
+		return false
+	}
+	return currentID-lastID > du.postGapLimit
+}
+
+func difficultiesChanged(existing map[string]dto.SongDifficulty, latest map[string]dto.SongsAll5Difficulty) bool {
+	if len(existing) != len(latest) {
+		return true
+	}
+	for key, newDiff := range latest {
+		cur, ok := existing[key]
+		if !ok || difficultyEntryChanged(cur, newDiff) {
+			return true
+		}
+	}
+	for key := range existing {
+		if _, ok := latest[key]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+func difficultyEntryChanged(existing dto.SongDifficulty, latest dto.SongsAll5Difficulty) bool {
+	if existing.PlayLevel != latest.PlayLevel {
+		return true
+	}
+	return !publishedAtEqual(existing.PublishedAt, latest.PublishedAt)
+}
+
+func publishedAtEqual(existing, latest *[]*string) bool {
+	if existing == nil && latest == nil {
+		return true
+	}
+	if existing == nil || latest == nil {
+		return false
+	}
+	return reflect.DeepEqual(*existing, *latest)
+}
+
+func normalizeSongsAll8Info(info dto.SongsAll8Info) dto.SongsAll8Info {
+	info.Difficulty = nil
+	return info
 }
 
 // StartUpdating schedules periodic updates every 10 minutes and ensures only one run at a time.
