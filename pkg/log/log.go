@@ -5,9 +5,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -44,6 +44,7 @@ var logger Logger
 type CustomFormatter struct {
 	TimestampFormat string
 	ForceColors     bool
+	Location        *time.Location
 }
 
 // Format 实现 logrus.Formatter 接口
@@ -83,8 +84,13 @@ func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		return fmt.Appendf(nil, "%s %s\n", level, entry.Message), nil
 	}
 
+	loc := f.Location
+	if loc == nil {
+		loc = time.Local
+	}
+	ts := entry.Time.In(loc)
 	// 时间戳颜色（浅蓝色）
-	timestamp := HiCyan("[%s]", entry.Time.Format(f.TimestampFormat))
+	timestamp := HiCyan("[%s]", ts.Format(f.TimestampFormat))
 
 	// 日志级别颜色和名称
 	var levelColor ColorFunc
@@ -133,6 +139,7 @@ func Init(conf *config.Config, logName string) error {
 	logger.SetFormatter(&CustomFormatter{
 		TimestampFormat: "2006-01-02 15:04:05",
 		ForceColors:     true,
+		Location:        time.Local,
 	})
 
 	lumberjackLogger := &lumberjack.Logger{

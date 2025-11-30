@@ -30,7 +30,7 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
-log/
+/log/
 config.yaml
 
 AGENTS.md
